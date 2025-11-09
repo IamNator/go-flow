@@ -52,6 +52,7 @@ const (
 	flowPrefixMinLength     = 4
 	flowNumberIncrement     = 2
 	httpClientTimeout       = 10 * time.Second
+	maxDisplayedStringLen   = 120
 )
 
 const (
@@ -227,6 +228,10 @@ func (e *varExporter) Close() error {
 		return nil
 	}
 	defer e.file.Close()
+
+	if len(e.records) == 0 {
+		return nil
+	}
 
 	encoder := json.NewEncoder(e.file)
 	encoder.SetIndent("", "  ")
@@ -553,7 +558,7 @@ func (r *FlowRunner) RunFlow(ctx context.Context, flowPath string, overrides map
 		maps.Copy(vars, flow.Vars)
 	}
 
-	maps.Copy(vars, overrides)
+	maps.Insert(vars, maps.All(overrides))
 
 	for _, step := range flow.Steps {
 		if err := r.executeStep(ctx, step, vars); err != nil {
@@ -593,10 +598,6 @@ func parseVarOverrides(pairs []string) (map[string]string, error) {
 
 	return overrides, nil
 }
-
-const (
-	maxDisplayedStringLen = 120
-)
 
 func (r *FlowRunner) executeStep(ctx context.Context, step Step, vars map[string]string) error {
 	if step.Skip {
