@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://golang.org)
 
-A powerful CLI tool for writing and executing end-to-end (E2E) tests using YAML-based flow definitions. `go-flow` supports HTTP requests, SQL queries, MongoDB operations, and gRPC calls, making it ideal for API testing, integration testing, and automated workflows.
+A powerful CLI tool for writing and executing end-to-end (E2E) tests using YAML-based flow definitions. `go-flow` supports HTTP requests, SQL queries, MongoDB operations, and gRPC calls, making it ideal for API testing, integration testing, and automated workflows. See the [changelog](CHANGELOG.md) for release highlights.
 
 ## TL;DR – ship a flow in 60 seconds
 
