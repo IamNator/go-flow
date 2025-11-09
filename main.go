@@ -45,14 +45,16 @@ import (
 )
 
 const (
-	defaultFlowDir          = "go-flow"
-	defaultExportedVarsPath = "go-flow/exports/"
-	dirPermission           = 0o755
-	filePermission          = 0o644
-	flowPrefixMinLength     = 4
-	flowNumberIncrement     = 2
-	httpClientTimeout       = 10 * time.Second
-	maxDisplayedStringLen   = 120
+	defaultFlowDir            = "go-flow"
+	defaultExportedVarsPath   = "go-flow/exports/"
+	dirPermission             = 0o755
+	filePermission            = 0o644
+	flowPrefixMinLength       = 4
+	flowNumberIncrement       = 2
+	httpClientTimeout         = 5 * time.Minute
+	maxDisplayedStringLen     = 120
+	defaultStepTimeoutSeconds = 30 // number of seconds for step timeout
+	exportByDefault           = true
 )
 
 const (
@@ -73,7 +75,7 @@ type Flow struct {
 type Step struct {
 	Wait               string            `yaml:"wait"`
 	Skip               bool              `yaml:"skip"`
-	Export             bool              `yaml:"export"`
+	Export             *bool             `yaml:"export"`
 	Name               string            `yaml:"name"`
 	TimeoutSeconds     int               `yaml:"timeout_seconds"`
 	Method             string            `yaml:"method"`
@@ -268,7 +270,7 @@ func (e *varExporter) warnExport(err error) {
 }
 
 func (e *varExporter) printToConsole(records []exportRecord) {
-	fmt.Printf("%sℹ export vars (stdout fallback):%s\n", colorCyan, colorReset)
+	fmt.Printf("%si export vars (stdout fallback):%s\n", colorCyan, colorReset)
 	if err := writeExportRecords(os.Stdout, records); err != nil {
 		fmt.Printf("%s⚠ unable to write exported vars to %q: %v%s\n",
 			colorRed,
@@ -280,7 +282,7 @@ func (e *varExporter) printToConsole(records []exportRecord) {
 }
 
 func (r *FlowRunner) recordExport(step Step, vars map[string]string) {
-	if !step.Export || r.exporter == nil {
+	if !step.isExportEnabled() || r.exporter == nil {
 		return
 	}
 
@@ -294,8 +296,15 @@ func (r *FlowRunner) recordExport(step Step, vars map[string]string) {
 
 func (s *Step) applyDefaults() {
 	if s.TimeoutSeconds == 0 {
-		s.TimeoutSeconds = 10
+		s.TimeoutSeconds = defaultStepTimeoutSeconds
 	}
+}
+
+func (s Step) isExportEnabled() bool {
+	if s.Export == nil {
+		return exportByDefault
+	}
+	return *s.Export
 }
 
 func main() {
