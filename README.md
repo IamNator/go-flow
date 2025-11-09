@@ -15,6 +15,8 @@ go-flow run --file flow/002_smoke-test.yaml
 
 Want a richer sample? `go-flow run --file examples/basic_http.yaml` and peek inside `examples/complex_checkout_flow.yaml`.
 
+Looking to wire this CLI into an autonomous agent? Read the LLM quick-reference in [`docs/LLM_GUIDE.md`](docs/LLM_GUIDE.md).
+
 ## Features
 
 **Protocols & data sources**
