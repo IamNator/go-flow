@@ -45,20 +45,12 @@ import (
 )
 
 const (
-	defaultFlowDir            = "flow"
-	dirPermission             = 0o755
-	filePermission            = 0o644
-	flowPrefixMinLength       = 4
-	flowNumberIncrement       = 2
-	emailLocalPartLength      = 8
-	emailDomainLength         = 5
-	phoneCountryCodeSpan      = 90
-	phoneCountryCodeBase      = 10
-	phoneAreaCodeSpan         = 900
-	phoneAreaCodeBase         = 100
-	phoneSubscriberNumberSpan = 9_000_000
-	phoneSubscriberNumberBase = 1_000_000
-	httpClientTimeout         = 10 * time.Second
+	defaultFlowDir      = "flow"
+	dirPermission       = 0o755
+	filePermission      = 0o644
+	flowPrefixMinLength = 4
+	flowNumberIncrement = 2
+	httpClientTimeout   = 10 * time.Second
 )
 
 const (
@@ -190,9 +182,7 @@ func (e *varExporter) Record(stepName string, values map[string]any) {
 	}
 
 	exportVars := make(map[string]any, len(values))
-	for k, v := range values {
-		exportVars[k] = v
-	}
+	maps.Copy(exportVars, values)
 
 	e.records = append(e.records, exportRecord{
 		Step: stepName,
@@ -242,7 +232,7 @@ func (s *Step) applyDefaults() {
 
 func main() {
 	app := &cli.App{
-		Name:           "flow",
+		Name:           "go-flow",
 		Usage:          "Run flows defined in YAML files",
 		DefaultCommand: "run",
 		Commands: []*cli.Command{

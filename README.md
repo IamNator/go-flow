@@ -44,7 +44,7 @@ go install github.com/IamNator/go-flow@latest
 ```bash
 git clone https://github.com/IamNator/go-flow.git
 cd go-flow
-go build -o flow
+go build -o go-flow
 ```
 
 ## Quick Start
@@ -136,7 +136,7 @@ Create a new flow file with a basic template.
 go-flow new user-registration
 
 # Create in a custom directory
-go-flow new signup-test --dir tests/e2e
+go-flow new --dir tests/e2e signup-test
 ```
 
 **Options:**
