@@ -45,12 +45,13 @@ import (
 )
 
 const (
-	defaultFlowDir      = "flow"
-	dirPermission       = 0o755
-	filePermission      = 0o644
-	flowPrefixMinLength = 4
-	flowNumberIncrement = 2
-	httpClientTimeout   = 10 * time.Second
+	defaultFlowDir          = "go-flow"
+	defaultExportedVarsPath = "go-flow/exports/"
+	dirPermission           = 0o755
+	filePermission          = 0o644
+	flowPrefixMinLength     = 4
+	flowNumberIncrement     = 2
+	httpClientTimeout       = 10 * time.Second
 )
 
 const (
@@ -138,6 +139,37 @@ type exportRecord struct {
 type varExporter struct {
 	file    *os.File
 	records []exportRecord
+}
+
+func resolveExportFilePath(input string) (string, error) {
+	path := strings.TrimSpace(input)
+
+	if ext := filepath.Ext(path); ext != "" {
+		dir := filepath.Dir(path)
+		if err := ensureDirExists(dir); err != nil {
+			return "", fmt.Errorf("create export directory %q: %w", dir, err)
+		}
+		return path, nil
+	}
+
+	if err := ensureDirExists(path); err != nil {
+		return "", fmt.Errorf("create export directory %q: %w", path, err)
+	}
+
+	return filepath.Join(path, nextExportFileName()), nil
+}
+
+func nextExportFileName() string {
+	return fmt.Sprintf("%s.json", time.Now().UTC().Format(time.RFC3339))
+}
+
+func ensureDirExists(dir string) error {
+	cleaned := strings.TrimSpace(dir)
+	if cleaned == "" || cleaned == "." || cleaned == string(filepath.Separator) {
+		return nil
+	}
+
+	return os.MkdirAll(cleaned, dirPermission)
 }
 
 func newFlowRunner(exportPath string) (*FlowRunner, error) {
@@ -340,10 +372,10 @@ steps:
 						Usage:   "Override flow variable (format key=value). Can be provided multiple times",
 					},
 					&cli.StringFlag{
-						Name:    "export_file",
+						Name:    "export_path",
 						Aliases: []string{"e"},
-						Value:   "exported_vars.json",
-						Usage:   "Path to export collected variables as JSON",
+						Value:   defaultExportedVarsPath,
+						Usage:   "Directory (or explicit file path) to export collected variables as JSON",
 					},
 				},
 				Action: runFlowsAction,
@@ -393,8 +425,13 @@ func runFlowsAction(c *cli.Context) (err error) {
 		return errors.New("no flow files found")
 	}
 
-	exportFilePath := c.String("export_file")
-	runner, err := newFlowRunner(exportFilePath)
+	exportPath := c.String("export_path")
+	exportFile, err := resolveExportFilePath(exportPath)
+	if err != nil {
+		return err
+	}
+
+	runner, err := newFlowRunner(exportFile)
 	if err != nil {
 		return err
 	}

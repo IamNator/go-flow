@@ -112,7 +112,7 @@ steps:
       payment_id: data.id
       payment_status: data.status
 
-  - name: persist-order-record
+  - name: update-order-record
     export: true
     sql: |
       UPDATE orders

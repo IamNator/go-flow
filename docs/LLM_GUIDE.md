@@ -20,7 +20,7 @@ go build -o go-flow ./...
 | Command | Purpose | Key Flags / Notes |
 |---------|---------|------------------|
 | `go-flow new <flow-name>` | Scaffold `flow/<NNN>_<flow-name>.yaml` (increments by 2). | Put flags **before** `<flow-name>`: `go-flow new --dir tests/e2e signup`. |
-| `go-flow run` | Execute one or more flows. | `--file PATH`, `--dir DIR`, `--flow NAME`, `--var key=value`, `--export_file exported_vars.json`. |
+| `go-flow run` | Execute one or more flows. | `--file PATH`, `--dir DIR`, `--flow NAME`, `--var key=value`, `--export_path DIR/FILE` (defaults to `go-flow/exports/`; go-flow writes timestamped files like `2025-11-07T18:42:41Z.json` inside directories). |
 | `go-flow list` | List discoverable flows. | `--dir DIR` (defaults to `flow`). |
 
 ## Workflow (LLM Checklist)
@@ -28,7 +28,7 @@ go build -o go-flow ./...
 2. **Scaffold (if needed)**: `go-flow new --dir DIR flow-name` and then edit the generated YAML.
 3. **Edit flow**: modify `vars` and `steps`; remember each step is HTTP *or* SQL *or* Mongo *or* gRPC.
 4. **Run**: `go-flow run` (all flows), `go-flow run --flow NAME`, or `--file PATH` for a single YAML.
-5. **Override**: add `--var key=value` for dynamic substitutions and `--export_file path.json` to persist saved vars.
+5. **Override / export**: add `--var key=value` for dynamic substitutions and `--export_path path/to/dir` (defaults to `go-flow/exports/`; go-flow will create the directory and drop a file named like `2025-11-07T18:42:41Z.json` inside). Supply a filename (e.g., `/tmp/vars.json`) if you want an explicit path. Only steps with `export: true` and `save` fields contribute to the file.
 6. **Interpret output**: ✅ / ❌ lines indicate pass/fail; failures print response payloads for quick debugging.
 
 ## Flow Structure
@@ -50,7 +50,7 @@ steps:
 ```
 - `wait: "5s"` pauses before the step (templated duration).
 - `timeout_seconds` defaults to 10 if omitted.
-- `export: true` + `save` pushes captured vars into `--export_file`.
+- `export: true` + `save` pushes captured vars into `--export_path`.
 
 ## Step Reference
 - **HTTP**: require `method` + `url`; optional `headers`, `body`, `expect_status`, `save` (GJSON paths).
@@ -73,6 +73,6 @@ Helpers live in `template_funcs.go`; consult it before relying on additional beh
 ## Tips & Reminders
 - Always mention the binary as `go-flow` (never `flow`).
 - Flags must appear before positional args due to Go’s `flag` parsing.
-- Saved values go into an in-memory map and can be exported via `--export_file`.
+- Saved values go into an in-memory map and can be exported via `--export_path` (defaults to timestamped files like `2025-11-07T18:42:41Z.json` inside `go-flow/exports/`; point the flag elsewhere to change directory or filename).
 - Runner stops on first failing step; rerun after fixing the underlying issue.
 - Keep YAML as ASCII; template renders use Go’s `text/template` with `missingkey=zero`.

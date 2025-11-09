@@ -128,6 +128,9 @@ go-flow run --var base=http://localhost:3000 --var api_key=secret123
 - `-d, --dir` - Directory containing flow files (default: `flow`)
 - `-n, --flow` - Flow name (file name without extension)
 - `-v, --var` - Override flow variable (format: `key=value`)
+- `-e, --export_path` - Directory (or explicit file path) for exported `save` variables. If you pass a directory, go-flow writes timestamped files like `2025-11-07T18:42:41Z.json` inside it (default directory: `go-flow/exports/`).
+
+> Go-flow creates the default `go-flow/exports/` directory on demand, but you can point `--export_path` anywhere else (directory or filename) if you prefer a different location.
 
 #### `go-flow new`
 
