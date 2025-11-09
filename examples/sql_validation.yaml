@@ -1,0 +1,28 @@
+vars:
+  database_url: postgres://postgres:postgres@localhost:5432/app?sslmode=disable
+  target_email: qa-user@example.com
+
+steps:
+  - name: ensure-user-exists
+    sql: |
+      INSERT INTO users (email, name)
+      VALUES ('{{.target_email}}', 'QA User')
+      ON CONFLICT (email) DO NOTHING;
+    expect_affected_rows: 0
+
+  - name: load-user
+    sql: |
+      SELECT id, email, created_at
+      FROM users
+      WHERE email = '{{.target_email}}'
+      LIMIT 1;
+    expect_affected_rows: 1
+    save:
+      user_id: id
+      user_created_at: created_at
+
+  - name: clean-up-user
+    sql: |
+      DELETE FROM users
+      WHERE email = '{{.target_email}}';
+    expect_affected_rows: 1

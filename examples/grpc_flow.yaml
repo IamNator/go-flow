@@ -1,0 +1,16 @@
+vars:
+  grpc_target: localhost:50051
+  greeter_method: helloworld.Greeter/SayHello
+
+steps:
+  - name: call-greeter
+    grpc:
+      target: "{{.grpc_target}}"
+      method: "{{.greeter_method}}"
+      metadata:
+        x-request-id: "req-{{randString 8}}"
+      request: |
+        {"name": "{{randomName}}"}
+      expect_code: OK
+    save:
+      greeting: message

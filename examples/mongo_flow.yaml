@@ -1,0 +1,50 @@
+vars:
+  mongo_uri: mongodb://localhost:27017
+  mongo_database: sandbox
+  demo_email: qa-mongo@example.com
+
+steps:
+  - name: insert-user
+    mongo:
+      database: "{{.mongo_database}}"
+      collection: users
+      operation: insertOne
+      document: |
+        {
+          "email": "{{.demo_email}}",
+          "name": "{{randomName}}",
+          "active": true
+        }
+    expect_affected_rows: 1
+    save:
+      inserted_id: inserted_id.$oid
+
+  - name: fetch-user
+    mongo:
+      database: "{{.mongo_database}}"
+      collection: users
+      operation: findOne
+      filter: |
+        {"_id": {"$oid": "{{.inserted_id}}"}}
+    save:
+      current_name: name
+
+  - name: deactivate-user
+    mongo:
+      database: "{{.mongo_database}}"
+      collection: users
+      operation: updateOne
+      filter: |
+        {"_id": {"$oid": "{{.inserted_id}}"}}
+      update: |
+        {"$set": {"active": false}}
+    expect_affected_rows: 1
+
+  - name: delete-user
+    mongo:
+      database: "{{.mongo_database}}"
+      collection: users
+      operation: deleteOne
+      filter: |
+        {"_id": {"$oid": "{{.inserted_id}}"}}
+    expect_affected_rows: 1

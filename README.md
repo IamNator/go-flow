@@ -5,20 +5,31 @@
 
 A powerful CLI tool for writing and executing end-to-end (E2E) tests using YAML-based flow definitions. `go-flow` supports HTTP requests, SQL queries, MongoDB operations, and gRPC calls, making it ideal for API testing, integration testing, and automated workflows.
 
+## TL;DR – ship a flow in 60 seconds
+
+```bash
+go install github.com/IamNator/go-flow@latest
+go-flow new smoke-test      # scaffold
+go-flow run --file flow/002_smoke-test.yaml
+```
+
+Want a richer sample? `go-flow run --file examples/basic_http.yaml` and peek inside `examples/complex_checkout_flow.yaml`.
+
 ## Features
 
-- 🚀 **YAML-based Flow Definitions** - Write test flows in simple, readable YAML files
-- 🌐 **HTTP Request Support** - Test REST APIs with full control over methods, headers, and bodies
-- 🔌 **gRPC Invocation** - Call unary or streaming RPCs via reflection or descriptor sets
-- 🍃 **MongoDB Operations** - Query or mutate Mongo collections without leaving your flow
-- 🗄️ **SQL Query Execution** - Execute SQL queries and validate results (PostgreSQL supported)
-- 💾 **Variable Management** - Save and reuse values from responses using JSON paths or SQL columns
-- 🎲 **Template Functions** - Generate random data (UUIDs, emails, phone numbers, names, etc.)
-- ✅ **Assertion Support** - Validate HTTP status codes and SQL affected rows
-- 🎨 **Colored Output** - Easy-to-read console output with color-coded results
-- ⏱️ **Timeout Configuration** - Configurable timeouts per step
-- ⏭️ **Step Skipping** - Skip individual steps conditionally during flow execution
-- 📁 **Flow Organization** - Organize flows in directories with automatic numbering
+**Protocols & data sources**
+- HTTP/REST, GraphQL, gRPC (reflection or protos)
+- SQL (Postgres) + MongoDB driver operations
+
+**Flow ergonomics**
+- YAML templates with rich random-data helpers
+- Save/export variables, reuse across steps
+- Assertions on HTTP status, DB rows, and more
+
+**Productivity boosts**
+- Colored CLI output, per-step timeouts, optional skips
+- Examples directory plus `go-flow new` scaffolding
+- Organized flows by directory prefix
 
 ## Installation
 
@@ -41,7 +52,7 @@ go build -o flow
 1. **Create a new flow:**
 
 ```bash
-flow new my-first-test
+go-flow new my-first-test
 ```
 
 This creates a file `flow/002_my-first-test.yaml` with a basic template.
@@ -72,32 +83,42 @@ steps:
 3. **Run the flow:**
 
 ```bash
-flow run
+go-flow run
 ```
+
+## Examples
+
+Explore the `examples/` directory for ready-to-run flows showcasing HTTP, SQL, MongoDB, and gRPC steps. Execute any sample directly:
+
+```bash
+go-flow run --file examples/basic_http.yaml
+```
+
+See `examples/README.md` for a quick overview of what each file demonstrates.
 
 ## Usage
 
 ### Commands
 
-#### `flow run`
+#### `go-flow run`
 
 Execute flow files.
 
 ```bash
 # Run all flows in the default 'flow' directory
-flow run
+go-flow run
 
 # Run a specific flow by name
-flow run --flow my-test
+go-flow run --flow my-test
 
 # Run a specific flow file
-flow run --file /path/to/flow.yaml
+go-flow run --file /path/to/flow.yaml
 
 # Run flows from a different directory
-flow run --dir tests/flows
+go-flow run --dir tests/flows
 
 # Override variables
-flow run --var base=http://localhost:3000 --var api_key=secret123
+go-flow run --var base=http://localhost:3000 --var api_key=secret123
 ```
 
 **Options:**
@@ -106,31 +127,31 @@ flow run --var base=http://localhost:3000 --var api_key=secret123
 - `-n, --flow` - Flow name (file name without extension)
 - `-v, --var` - Override flow variable (format: `key=value`)
 
-#### `flow new`
+#### `go-flow new`
 
 Create a new flow file with a basic template.
 
 ```bash
 # Create a new flow in the default directory
-flow new user-registration
+go-flow new user-registration
 
 # Create in a custom directory
-flow new signup-test --dir tests/e2e
+go-flow new signup-test --dir tests/e2e
 ```
 
 **Options:**
 - `-d, --dir` - Directory to create the flow file in (default: `flow`)
 
-#### `flow list`
+#### `go-flow list`
 
 List all available flows in a directory.
 
 ```bash
 # List flows in default directory
-flow list
+go-flow list
 
 # List flows in custom directory
-flow list --dir tests/e2e
+go-flow list --dir tests/e2e
 ```
 
 ## Flow File Structure
@@ -555,7 +576,7 @@ Example:
 
 ```bash
 export DATABASE_URL="postgres://user:password@localhost:5432/mydb?sslmode=disable"
-flow run
+go-flow run
 ```
 
 ### Timeout Configuration

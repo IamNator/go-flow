@@ -1,0 +1,177 @@
+vars:
+  api_base: http://localhost:8080/api/v1
+  payment_api: https://sandbox.payments.local/v1
+  shipping_api: https://sandbox.shipping.local/v1
+  graphql_url: http://localhost:8080/graphql
+  database_url: postgres://postgres:postgres@localhost:5432/app?sslmode=disable
+  mongo_uri: mongodb://localhost:27017
+  mongo_database: commerce
+  fulfillment_grpc_target: localhost:50055
+  fulfillment_grpc_method: fulfillment.Dispatch/NotifyShipment
+
+steps:
+  - name: create-customer
+    method: POST
+    url: "{{.api_base}}/customers"
+    headers:
+      Content-Type: application/json
+    body: |
+      {
+        "email": "{{randomEmail}}",
+        "name": "{{randomName}}",
+        "phone": "{{randomPhone}}"
+      }
+    expect_status: 201
+    save:
+      customer_id: data.id
+      customer_email: data.email
+
+  - name: start-cart
+    method: POST
+    url: "{{.api_base}}/carts"
+    headers:
+      Content-Type: application/json
+    body: |
+      {
+        "customer_id": "{{.customer_id}}"
+      }
+    expect_status: 201
+    save:
+      cart_id: data.id
+      cart_token: data.token
+
+  - name: add-primary-item
+    method: POST
+    export: true
+    url: "{{.api_base}}/carts/{{.cart_id}}/items"
+    headers:
+      Content-Type: application/json
+      X-Cart-Token: "{{.cart_token}}"
+    body: |
+      {
+        "sku": "SKU-{{randomInt 1000 9999}}",
+        "quantity": 1,
+        "price_cents": 2599
+      }
+    expect_status: 200
+    save:
+      line_item_id: data.items.0.id
+
+  - name: add-upsell-item
+    method: POST
+    url: "{{.api_base}}/carts/{{.cart_id}}/items"
+    headers:
+      Content-Type: application/json
+      X-Cart-Token: "{{.cart_token}}"
+    body: |
+      {
+        "sku": "SKU-UPSELL",
+        "quantity": 2,
+        "price_cents": 999
+      }
+    expect_status: 200
+
+  - name: reserve-shipping-slot
+    method: POST
+    export: true
+    url: "{{.shipping_api}}/slots/reservations"
+    headers:
+      Content-Type: application/json
+      X-Trace-Id: "ship-{{randString 8}}"
+    body: |
+      {
+        "customer": {
+          "email": "{{.customer_email}}"
+        },
+        "items": [
+          {"sku": "{{.line_item_id}}", "quantity": 1}
+        ]
+      }
+    expect_status: 200
+    save:
+      shipping_reservation_id: data.reservation_id
+
+  - name: authorize-payment
+    method: POST
+    export: true
+    url: "{{.payment_api}}/payments"
+    headers:
+      Content-Type: application/json
+    body: |
+      {
+        "cart_id": "{{.cart_id}}",
+        "amount_cents": 4597,
+        "currency": "USD",
+        "source": {
+          "card": "4242-4242-4242-4242",
+          "expiry": "12/27"
+        }
+      }
+    expect_status: 201
+    save:
+      payment_id: data.id
+      payment_status: data.status
+
+  - name: persist-order-record
+    export: true
+    sql: |
+      UPDATE orders
+         SET status = 'authorized',
+             payment_id = '{{.payment_id}}',
+             total_cents = 4597,
+             updated_at = NOW()
+       WHERE cart_id = '{{.cart_id}}'
+       RETURNING id;
+    expect_affected_rows: 1
+    save:
+      order_id: id
+
+  - name: track-loyalty-touches
+    mongo:
+      uri: "{{.mongo_uri}}"
+      database: "{{.mongo_database}}"
+      collection: loyalty_metrics
+      operation: updateOne
+      filter: |
+        {"customer_id": "{{.customer_id}}"}
+      update: |
+        {"$inc": {"orders": 1}, "$setOnInsert": {"joined_at": {"$date": "2020-01-01T00:00:00Z"}}}
+    expect_affected_rows: 1
+
+  - name: notify-fulfillment
+    grpc:
+      target: "{{.fulfillment_grpc_target}}"
+      method: "{{.fulfillment_grpc_method}}"
+      request: |
+        {
+          "order_id": "{{.order_id}}",
+          "reservation_id": "{{.shipping_reservation_id}}"
+        }
+      expect_code: OK
+
+  - name: refresh-analytics
+    method: POST
+    url: "{{.graphql_url}}"
+    headers:
+      Content-Type: application/json
+      X-Internal-Request: checkout
+    body: |
+      {
+        "query": "mutation RefreshStats($orderId: ID!) { refreshOrderStats(orderId: $orderId) }",
+        "variables": {
+          "orderId": "{{.order_id}}"
+        }
+      }
+    expect_status: 200
+
+  - name: finalize-order
+    method: POST
+    url: "{{.api_base}}/orders/{{.order_id}}/complete"
+    headers:
+      Content-Type: application/json
+    body: |
+      {
+        "payment_status": "{{.payment_status}}",
+        "shipping_reservation_id": "{{.shipping_reservation_id}}"
+      }
+    expect_status: 202
