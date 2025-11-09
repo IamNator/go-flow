@@ -25,7 +25,7 @@ Looking to wire this CLI into an autonomous agent? Read the LLM quick-reference 
 
 **Flow ergonomics**
 - YAML templates with rich random-data helpers
-- Save/export variables, reuse across steps
+- Save/export variables, reuse across steps (exports only write files when data exists, otherwise they stay in-memory)
 - Assertions on HTTP status, DB rows, and more
 
 **Productivity boosts**
@@ -113,8 +113,17 @@ go-flow run --file /path/to/flow.yaml
 # Run flows from a different directory
 go-flow run --dir tests/flows
 
-# Override variables
+# Override variables & export collected data
 go-flow run --var base=http://localhost:3000 --var api_key=secret123
+
+# Export saved variables (directory created only if there is data; otherwise nothing is written)
+go-flow run --export_path go-flow/exports/
+
+# Force-export all steps that call `save` (even if `export: true` is not set per step)
+go-flow run --export --export_path go-flow/exports/
+
+# Export to explicit file with stdout fallback if the file cannot be written
+go-flow run --export_path /tmp/last-flow-vars.json
 ```
 
 **Options:**
@@ -122,9 +131,8 @@ go-flow run --var base=http://localhost:3000 --var api_key=secret123
 - `-d, --dir` - Directory containing flow files (default: `flow`)
 - `-n, --flow` - Flow name (file name without extension)
 - `-v, --var` - Override flow variable (format: `key=value`)
-- `-e, --export_path` - Directory (or explicit file path) for exported `save` variables. If you pass a directory, go-flow writes timestamped files like `2025-11-07T18:42:41Z.json` inside it (default directory: `go-flow/exports/`).
-
-> Go-flow creates the default `go-flow/exports/` directory on demand, but you can point `--export_path` anywhere else (directory or filename) if you prefer a different location.
+- `-e, --export` - Toggle default export behavior for every step; once enabled, any step that calls `save` (and does not explicitly set `export: false`) will write captured variables to `--export_path`.
+- `-ep, --export_path` - Directory (or explicit file path) for exported `save` variables. Directories are created only if at least one step exports data; otherwise nothing is touched. If go-flow cannot write to the chosen path, it prints the JSON to stdout so you still get the captured values (default path: `go-flow/exports/` generating timestamped filenames like `2025-11-07T18:42:41Z.json`).
 
 #### `go-flow new`
 

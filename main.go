@@ -54,7 +54,7 @@ const (
 	httpClientTimeout         = 5 * time.Minute
 	maxDisplayedStringLen     = 120
 	defaultStepTimeoutSeconds = 30 // number of seconds for step timeout
-	exportByDefault           = true
+	exportByDefault           = false
 )
 
 const (
@@ -416,9 +416,15 @@ steps:
 						Aliases: []string{"v"},
 						Usage:   "Override flow variable (format key=value). Can be provided multiple times",
 					},
+					&cli.BoolFlag{
+						Name:    "export",
+						Aliases: []string{"e"},
+						Value:   exportByDefault,
+						Usage:   "Set default export behavior for steps (can be overridden per step)",
+					},
 					&cli.StringFlag{
 						Name:    "export_path",
-						Aliases: []string{"e"},
+						Aliases: []string{"ep"},
 						Value:   defaultExportedVarsPath,
 						Usage:   "Directory (or explicit file path) to export collected variables as JSON",
 					},
