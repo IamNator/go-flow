@@ -138,7 +138,7 @@ type exportRecord struct {
 }
 
 type varExporter struct {
-	file    *os.File
+	path    string
 	records []exportRecord
 }
 
@@ -146,15 +146,7 @@ func resolveExportFilePath(input string) (string, error) {
 	path := strings.TrimSpace(input)
 
 	if ext := filepath.Ext(path); ext != "" {
-		dir := filepath.Dir(path)
-		if err := ensureDirExists(dir); err != nil {
-			return "", fmt.Errorf("create export directory %q: %w", dir, err)
-		}
 		return path, nil
-	}
-
-	if err := ensureDirExists(path); err != nil {
-		return "", fmt.Errorf("create export directory %q: %w", path, err)
 	}
 
 	return filepath.Join(path, nextExportFileName()), nil
@@ -198,13 +190,8 @@ func (r *FlowRunner) Close() error {
 }
 
 func newVarExporter(path string) (*varExporter, error) {
-	file, err := os.Create(path)
-	if err != nil {
-		return nil, fmt.Errorf("create exported vars file: %w", err)
-	}
-
 	return &varExporter{
-		file:    file,
+		path:    path,
 		records: make([]exportRecord, 0),
 	}, nil
 }
@@ -224,31 +211,72 @@ func (e *varExporter) Record(stepName string, values map[string]any) {
 }
 
 func (e *varExporter) Close() error {
-	if e == nil || e.file == nil {
+	if e == nil || len(e.records) == 0 {
 		return nil
 	}
-	defer e.file.Close()
 
-	if len(e.records) == 0 {
-		// delete empty file
-		if err := os.Remove(e.file.Name()); err != nil {
-			return fmt.Errorf("delete empty exported vars file: %w", err)
-		}
+	dir := filepath.Dir(e.path)
+	if dir == "" {
+		dir = "."
 	}
-
-	encoder := json.NewEncoder(e.file)
-	encoder.SetIndent("", "  ")
 
 	records := e.records
 	if records == nil {
 		records = make([]exportRecord, 0)
 	}
 
-	if err := encoder.Encode(records); err != nil {
-		return fmt.Errorf("write exported vars: %w", err)
+	if err := ensureDirExists(dir); err != nil {
+		e.warnExport(fmt.Errorf("unable to create export directory %q: %w", dir, err))
+		e.printToConsole(records)
+		return nil
+	}
+
+	file, err := os.Create(e.path)
+	if err != nil {
+		e.warnExport(fmt.Errorf("unable to write exported vars to %q: %w", e.path, err))
+		e.printToConsole(records)
+		return nil
+	}
+	defer file.Close()
+
+	if err := writeExportRecords(file, records); err != nil {
+		e.warnExport(fmt.Errorf("unable to write exported vars to %q: %w", e.path, err))
+		e.printToConsole(records)
+		return nil
 	}
 
 	return nil
+}
+
+func writeExportRecords(w io.Writer, records []exportRecord) error {
+	if w == nil {
+		return errors.New("missing export writer")
+	}
+
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+
+	if err := encoder.Encode(records); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (e *varExporter) warnExport(err error) {
+	fmt.Printf("%s⚠ %v%s\n", colorRed, err, colorReset)
+}
+
+func (e *varExporter) printToConsole(records []exportRecord) {
+	fmt.Printf("%sℹ export vars (stdout fallback):%s\n", colorCyan, colorReset)
+	if err := writeExportRecords(os.Stdout, records); err != nil {
+		fmt.Printf("%s⚠ unable to write exported vars to %q: %v%s\n",
+			colorRed,
+			"stdout",
+			err,
+			colorReset,
+		)
+	}
 }
 
 func (r *FlowRunner) recordExport(step Step, vars map[string]string) {

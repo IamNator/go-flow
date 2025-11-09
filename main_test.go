@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -41,10 +43,6 @@ func TestResolveExportFilePath(t *testing.T) {
 		}
 		if got != explicit {
 			t.Fatalf("expected %q, got %q", explicit, got)
-		}
-
-		if _, err := os.Stat(filepath.Dir(got)); err != nil {
-			t.Fatalf("expected containing directory to exist: %v", err)
 		}
 	})
 
@@ -373,5 +371,66 @@ func TestSaveValues(t *testing.T) {
 	}
 	if _, ok := vars["missing"]; ok {
 		t.Fatalf("expected missing path to be ignored")
+	}
+}
+
+func TestVarExporterSkipsFileWithoutRecords(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "exports", "vars.json")
+
+	exporter, err := newVarExporter(path)
+	if err != nil {
+		t.Fatalf("newVarExporter: %v", err)
+	}
+
+	if err := exporter.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected no file to be created, got err=%v", err)
+	}
+
+	if _, err := os.Stat(filepath.Dir(path)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected directory to remain absent, got err=%v", err)
+	}
+}
+
+func TestVarExporterWritesRecordsOnClose(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "exports", "vars.json")
+
+	exporter, err := newVarExporter(path)
+	if err != nil {
+		t.Fatalf("newVarExporter: %v", err)
+	}
+
+	exporter.Record("example", map[string]any{
+		"user_id": "123",
+	})
+
+	if err := exporter.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Dir(path)); err != nil {
+		t.Fatalf("expected directory to be created, got %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read export file: %v", err)
+	}
+
+	var records []exportRecord
+	if err := json.Unmarshal(data, &records); err != nil {
+		t.Fatalf("unmarshal export json: %v", err)
+	}
+
+	if len(records) != 1 || records[0].Step != "example" {
+		t.Fatalf("unexpected records: %+v", records)
+	}
+	if records[0].Vars["user_id"] != "123" {
+		t.Fatalf("expected saved user_id 123, got %v", records[0].Vars["user_id"])
 	}
 }
