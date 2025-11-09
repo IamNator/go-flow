@@ -230,7 +230,10 @@ func (e *varExporter) Close() error {
 	defer e.file.Close()
 
 	if len(e.records) == 0 {
-		return nil
+		// delete empty file
+		if err := os.Remove(e.file.Name()); err != nil {
+			return fmt.Errorf("delete empty exported vars file: %w", err)
+		}
 	}
 
 	encoder := json.NewEncoder(e.file)
