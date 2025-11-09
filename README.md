@@ -13,7 +13,7 @@ go-flow new smoke-test      # scaffold
 go-flow run --file flow/002_smoke-test.yaml
 ```
 
-Want a richer sample? `go-flow run --file examples/basic_http.yaml` and peek inside `examples/complex_checkout_flow.yaml`.
+Want a richer sample? Peek inside `examples/basic_http.yaml` and `examples/complex_checkout_flow.yaml`.
 
 Looking to wire this CLI into an autonomous agent? Read the LLM quick-reference in [`docs/LLM_GUIDE.md`](docs/LLM_GUIDE.md).
 
@@ -90,13 +90,7 @@ go-flow run
 
 ## Examples
 
-Explore the `examples/` directory for ready-to-run flows showcasing HTTP, SQL, MongoDB, and gRPC steps. Execute any sample directly:
-
-```bash
-go-flow run --file examples/basic_http.yaml
-```
-
-See `examples/README.md` for a quick overview of what each file demonstrates.
+Explore the `examples/` directory for ready-to-adapt flows showcasing HTTP, SQL, MongoDB, and gRPC steps. These files point at local dev services, so treat them as references to copy and customize for your environment. See `examples/README.md` for a quick overview of what each file demonstrates.
 
 ## Usage
 

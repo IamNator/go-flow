@@ -1726,6 +1726,8 @@ func trimLongString(s string) string {
 var templateFuncs = template.FuncMap{
 	"toLower":               strings.ToLower,
 	"toUpper":               strings.ToUpper,
+	"trimSpace":             strings.TrimSpace,
+	"trim":                  strings.Trim,
 	"randString":            randomString,
 	"randomAddress":         randomAddress,
 	"randomCity":            randomCity,
