@@ -3,10 +3,39 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"text/template"
 	"time"
 
 	"github.com/brianvoe/gofakeit/v7"
+	"github.com/google/uuid"
 )
+
+var templateFuncs = template.FuncMap{
+	"toLower":               strings.ToLower,
+	"toUpper":               strings.ToUpper,
+	"trimSpace":             strings.TrimSpace,
+	"trim":                  strings.Trim,
+	"replaceChar":           replaceCharacter,
+	"replaceString":         strings.ReplaceAll,
+	"randString":            randomString,
+	"randomAddress":         randomAddress,
+	"randomCity":            randomCity,
+	"randomColor":           randomColor,
+	"randomCompany":         randomCompany,
+	"randomCompanyIndustry": randomCompanyIndustry,
+	"randomCountry":         randomCountry,
+	"randomEmail":           randomEmail,
+	"randomInt":             randomInt,
+	"randomJobTitle":        randomJobTitle,
+	"randomName":            randomName,
+	"randomParagraph":       randomParagraph,
+	"randomPhone":           randomPhone,
+	"randomSentence":        randomSentence,
+	"randomUUID":            uuid.NewString,
+	"randomWebsite":         randomWebsite,
+	"randomZipCode":         randomZipCode,
+}
 
 const (
 	alphaNumericRegexFormat = "[A-Za-z0-9]{%d}"
@@ -101,4 +130,14 @@ func randomWebsite() string {
 
 func randomColor() string {
 	return gofakeit.Color()
+}
+
+func replaceCharacter(input string, oldChar, newChar rune) string {
+	runes := []rune(input)
+	for i, r := range runes {
+		if r == oldChar {
+			runes[i] = newChar
+		}
+	}
+	return string(runes)
 }

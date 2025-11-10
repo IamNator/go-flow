@@ -23,7 +23,6 @@ import (
 	"time"
 
 	legacyproto "github.com/golang/protobuf/proto"
-	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v3"
@@ -1768,28 +1767,4 @@ func trimLongString(s string) string {
 	}
 
 	return s[:maxDisplayedStringLen] + "..."
-}
-
-var templateFuncs = template.FuncMap{
-	"toLower":               strings.ToLower,
-	"toUpper":               strings.ToUpper,
-	"trimSpace":             strings.TrimSpace,
-	"trim":                  strings.Trim,
-	"randString":            randomString,
-	"randomAddress":         randomAddress,
-	"randomCity":            randomCity,
-	"randomColor":           randomColor,
-	"randomCompany":         randomCompany,
-	"randomCompanyIndustry": randomCompanyIndustry,
-	"randomCountry":         randomCountry,
-	"randomEmail":           randomEmail,
-	"randomInt":             randomInt,
-	"randomJobTitle":        randomJobTitle,
-	"randomName":            randomName,
-	"randomParagraph":       randomParagraph,
-	"randomPhone":           randomPhone,
-	"randomSentence":        randomSentence,
-	"randomUUID":            uuid.NewString,
-	"randomWebsite":         randomWebsite,
-	"randomZipCode":         randomZipCode,
 }
