@@ -434,3 +434,36 @@ func TestVarExporterWritesRecordsOnClose(t *testing.T) {
 		t.Fatalf("expected saved user_id 123, got %v", records[0].Vars["user_id"])
 	}
 }
+
+func TestValidateAndSaveJSONHandlesBOM(t *testing.T) {
+	step := Step{
+		Name: "bom-step",
+		Save: map[string]string{
+			"foo": "value",
+		},
+	}
+	payload := append([]byte{0xEF, 0xBB, 0xBF}, []byte(`{"value":"123"}`)...)
+	vars := map[string]string{}
+
+	if err := validateAndSaveJSON(step, payload, vars, "response"); err != nil {
+		t.Fatalf("validateAndSaveJSON: %v", err)
+	}
+
+	if vars["foo"] != "123" {
+		t.Fatalf("expected foo=123, got %q", vars["foo"])
+	}
+}
+
+func TestValidateAndSaveJSONInvalidPayload(t *testing.T) {
+	step := Step{
+		Name: "bad-json",
+		Save: map[string]string{
+			"foo": "value",
+		},
+	}
+	payload := []byte{0xEF, 0xBB, 0xBF, 'n', 'o', 'p'}
+
+	if err := validateAndSaveJSON(step, payload, map[string]string{}, "response"); err == nil {
+		t.Fatalf("expected error for invalid JSON payload")
+	}
+}

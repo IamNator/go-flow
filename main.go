@@ -66,6 +66,8 @@ const (
 	bold       = "\033[1m"
 )
 
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
+
 type Flow struct {
 	Vars  map[string]string `yaml:"vars"`
 	Steps []Step            `yaml:"steps"`
@@ -1758,7 +1760,9 @@ func validateAndSaveJSON(step Step, payload []byte, vars map[string]string, cont
 		contextLabel = "response"
 	}
 
-	if !json.Valid(payload) {
+	cleanPayload := bytes.TrimPrefix(payload, utf8BOM)
+
+	if !json.Valid(cleanPayload) {
 		fmt.Printf("%s→ Invalid JSON %s for step %q%s\n",
 			colorGray,
 			contextLabel,
@@ -1774,7 +1778,7 @@ func validateAndSaveJSON(step Step, payload []byte, vars map[string]string, cont
 		return fmt.Errorf("step %q failed: invalid JSON %s", step.Name, contextLabel)
 	}
 
-	saveValues(payload, step.Save, vars)
+	saveValues(cleanPayload, step.Save, vars)
 	return nil
 }
 
