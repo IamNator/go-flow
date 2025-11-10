@@ -1721,6 +1721,7 @@ func saveValues(respBytes []byte, save map[string]string, vars map[string]string
 	saveCount := 0
 	for varName, jsonPath := range save {
 		val := gjson.GetBytes(respBytes, jsonPath).String()
+		val = strings.TrimSpace(val)
 		if val == "" {
 			continue
 		}
@@ -1737,6 +1738,11 @@ func saveValues(respBytes []byte, save map[string]string, vars map[string]string
 
 	if saveCount == 0 && len(save) > 0 {
 		fmt.Printf("   %sno values saved from response%s\n", colorGray, colorReset)
+
+		// actual response for debugging
+		fmt.Printf("   %sresponse: %s%s\n", colorGray, string(respBytes), colorReset)
+	} else if saveCount < len(save) {
+		fmt.Printf("   %ssome values not found to save from response%s\n", colorGray, colorReset)
 
 		// actual response for debugging
 		fmt.Printf("   %sresponse: %s%s\n", colorGray, string(respBytes), colorReset)
