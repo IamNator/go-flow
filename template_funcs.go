@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -17,7 +18,7 @@ var templateFuncs = template.FuncMap{
 	"trimSpace":             strings.TrimSpace,
 	"trim":                  strings.Trim,
 	"replaceChar":           replaceCharacter,
-	"replaceString":         strings.ReplaceAll,
+	"replace":               strings.ReplaceAll,
 	"randString":            randomString,
 	"randomAddress":         randomAddress,
 	"randomCity":            randomCity,
@@ -132,12 +133,15 @@ func randomColor() string {
 	return gofakeit.Color()
 }
 
-func replaceCharacter(input string, oldChar, newChar rune) string {
-	runes := []rune(input)
-	for i, r := range runes {
-		if r == oldChar {
-			runes[i] = newChar
-		}
+func decodeEscapes(s string) string {
+	decoded, err := strconv.Unquote(`"` + s + `"`)
+	if err != nil {
+		// fallback: return as-is
+		return s
 	}
-	return string(runes)
+	return decoded
+}
+
+func replaceCharacter(s, old, new string) string {
+	return strings.ReplaceAll(s, decodeEscapes(old), decodeEscapes(new))
 }
