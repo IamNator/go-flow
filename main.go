@@ -768,8 +768,8 @@ func (r *FlowRunner) executeStep(ctx context.Context, step Step, vars map[string
 		return fmt.Errorf("step %q failed: unexpected status %d", step.Name, resp.StatusCode)
 	}
 
-	if len(step.Save) > 0 && len(respBytes) > 0 && json.Valid(respBytes) {
-		saveValues(respBytes, step.Save, vars)
+	if err := validateAndSaveJSON(step, respBytes, vars, "response"); err != nil {
+		return err
 	}
 
 	r.recordExport(step, vars)
@@ -1194,8 +1194,8 @@ func (r *FlowRunner) executeGRPCStep(ctx context.Context, step Step, vars map[st
 	}
 
 	respBytes := handler.ResponsePayload()
-	if len(step.Save) > 0 && len(respBytes) > 0 && json.Valid(respBytes) {
-		saveValues(respBytes, step.Save, vars)
+	if err := validateAndSaveJSON(step, respBytes, vars, "response"); err != nil {
+		return err
 	}
 
 	r.recordExport(step, vars)
@@ -1747,6 +1747,35 @@ func saveValues(respBytes []byte, save map[string]string, vars map[string]string
 		// actual response for debugging
 		fmt.Printf("   %sresponse: %s%s\n", colorGray, string(respBytes), colorReset)
 	}
+}
+
+func validateAndSaveJSON(step Step, payload []byte, vars map[string]string, contextLabel string) error {
+	if len(step.Save) == 0 || len(payload) == 0 {
+		return nil
+	}
+
+	if contextLabel == "" {
+		contextLabel = "response"
+	}
+
+	if !json.Valid(payload) {
+		fmt.Printf("%s→ Invalid JSON %s for step %q%s\n",
+			colorGray,
+			contextLabel,
+			step.Name,
+			colorReset,
+		)
+		fmt.Printf("   %s%s: %s%s\n",
+			colorGray,
+			contextLabel,
+			string(payload),
+			colorReset,
+		)
+		return fmt.Errorf("step %q failed: invalid JSON %s", step.Name, contextLabel)
+	}
+
+	saveValues(payload, step.Save, vars)
+	return nil
 }
 
 func render(tmpl string, vars map[string]string) string {
