@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fullstorydev/grpcurl"
 	"google.golang.org/grpc/codes"
@@ -465,5 +466,84 @@ func TestValidateAndSaveJSONInvalidPayload(t *testing.T) {
 
 	if err := validateAndSaveJSON(step, payload, map[string]string{}, "response"); err == nil {
 		t.Fatalf("expected error for invalid JSON payload")
+	}
+}
+
+func TestNewRunLoggerEmptyPath(t *testing.T) {
+	logger, err := newRunLogger("   ")
+	if err != nil {
+		t.Fatalf("newRunLogger: %v", err)
+	}
+	if logger != nil {
+		t.Fatalf("expected nil logger when path empty")
+	}
+}
+
+func TestRunLoggerWritesArtifacts(t *testing.T) {
+	dir := t.TempDir()
+	logger, err := newRunLogger(dir)
+	if err != nil {
+		t.Fatalf("newRunLogger: %v", err)
+	}
+	if logger == nil {
+		t.Fatalf("expected logger instance")
+	}
+
+	logger.Record(stepLogEntry{
+		Step:           "http-step",
+		Type:           "http",
+		Status:         "success",
+		StartedAt:      time.Unix(0, 0),
+		DurationMillis: 42,
+		Request: map[string]any{
+			"method": "GET",
+			"url":    "http://example.com",
+		},
+		Response: map[string]any{
+			"status": 200,
+			"body":   "{}",
+		},
+	})
+
+	if err := logger.Close(); err != nil {
+		t.Fatalf("logger.Close: %v", err)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+
+	if len(entries) != 2 {
+		t.Fatalf("expected json + html files, got %d", len(entries))
+	}
+
+	var jsonFile, htmlFile string
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".json") {
+			jsonFile = filepath.Join(dir, entry.Name())
+		} else if strings.HasSuffix(entry.Name(), ".html") {
+			htmlFile = filepath.Join(dir, entry.Name())
+		}
+	}
+
+	if jsonFile == "" || htmlFile == "" {
+		t.Fatalf("expected both json and html files, got json=%q html=%q", jsonFile, htmlFile)
+	}
+
+	jsonData, err := os.ReadFile(jsonFile)
+	if err != nil {
+		t.Fatalf("read json log: %v", err)
+	}
+	if !strings.Contains(string(jsonData), "\"step\": \"http-step\"") {
+		t.Fatalf("json log missing step data: %s", string(jsonData))
+	}
+
+	htmlData, err := os.ReadFile(htmlFile)
+	if err != nil {
+		t.Fatalf("read html log: %v", err)
+	}
+	if !strings.Contains(string(htmlData), "go-flow log") {
+		t.Fatalf("html log missing marker")
 	}
 }

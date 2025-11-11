@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>go-flow log {{.run_id}}</title>
+  <style>
+    :root {
+      --bg-primary: #ffffff;
+      --bg-secondary: #f8f9fa;
+      --bg-tertiary: #e9ecef;
+      --text-primary: #1a1a1a;
+      --text-secondary: #6c757d;
+      --text-tertiary: #adb5bd;
+      --border: #dee2e6;
+      --shadow: rgba(0, 0, 0, 0.05);
+      --shadow-lg: rgba(0, 0, 0, 0.1);
+      --success: #28a745;
+      --success-bg: #d4edda;
+      --success-border: #c3e6cb;
+      --error: #dc3545;
+      --error-bg: #f8d7da;
+      --error-border: #f5c6cb;
+      --warning: #ffc107;
+      --warning-bg: #fff3cd;
+      --warning-border: #ffeaa7;
+      --info: #17a2b8;
+      --info-bg: #d1ecf1;
+      --accent: #007bff;
+      --code-bg: #f6f8fa;
+      --code-border: #e1e4e8;
+    }
+
+    [data-theme="dark"] {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #21262d;
+      --text-primary: #c9d1d9;
+      --text-secondary: #8b949e;
+      --text-tertiary: #6e7681;
+      --border: #30363d;
+      --shadow: rgba(0, 0, 0, 0.3);
+      --shadow-lg: rgba(0, 0, 0, 0.5);
+      --success: #3fb950;
+      --success-bg: #0f2a1a;
+      --success-border: #1a4d2e;
+      --error: #f85149;
+      --error-bg: #2a1a1a;
+      --error-border: #4d1a1a;
+      --warning: #d29922;
+      --warning-bg: #2a2414;
+      --warning-border: #4d3d1a;
+      --info: #58a6ff;
+      --info-bg: #0d1821;
+      --accent: #58a6ff;
+      --code-bg: #161b22;
+      --code-border: #30363d;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Consolas', monospace;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .header-meta {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+    }
+
+    .theme-toggle {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+    }
+
+    .theme-toggle:hover {
+      background: var(--bg-primary);
+      transform: translateY(-1px);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      box-shadow: 0 1px 3px var(--shadow);
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 0.25rem;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .filters {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .filter-group label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    select, input {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 0.625rem 0.875rem;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 0.875rem;
+      min-width: 180px;
+    }
+
+    select:focus, input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--info-bg);
+    }
+
+    .log-entries {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .log-card {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px var(--shadow);
+      transition: box-shadow 0.2s;
+    }
+
+    .log-card:hover {
+      box-shadow: 0 4px 12px var(--shadow-lg);
+    }
+
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      gap: 1rem;
+    }
+
+    .log-title {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      flex: 1;
+    }
+
+    .log-step {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .log-meta {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .badge-group {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.625rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge.success {
+      background: var(--success-bg);
+      color: var(--success);
+      border: 1px solid var(--success-border);
+    }
+
+    .badge.error {
+      background: var(--error-bg);
+      color: var(--error);
+      border: 1px solid var(--error-border);
+    }
+
+    .badge.skipped {
+      background: var(--warning-bg);
+      color: var(--warning);
+      border: 1px solid var(--warning-border);
+    }
+
+    .badge.type {
+      background: var(--info-bg);
+      color: var(--info);
+      border: 1px solid var(--border);
+    }
+
+    .log-body {
+      padding: 1.25rem;
+    }
+
+    details {
+      margin-bottom: 1rem;
+    }
+
+    details:last-child {
+      margin-bottom: 0;
+    }
+
+    summary {
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.875rem;
+      color: var(--text-primary);
+      padding: 0.5rem 0;
+      user-select: none;
+    }
+
+    summary:hover {
+      color: var(--accent);
+    }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--code-border);
+      border-radius: 6px;
+      padding: 1rem;
+      overflow-x: auto;
+      font-size: 0.8125rem;
+      line-height: 1.5;
+      margin-top: 0.5rem;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .error-block {
+      background: var(--error-bg);
+      border: 1px solid var(--error-border);
+      border-radius: 6px;
+      padding: 1rem;
+      margin-top: 1rem;
+      color: var(--error);
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--text-secondary);
+    }
+
+    .empty-state svg {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--text-tertiary);
+      font-size: 0.75rem;
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        padding: 1rem;
+      }
+
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+      }
+
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .log-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .badge-group {
+        width: 100%;
+        justify-content: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>go-flow execution log</h1>
+        <div class="header-meta">Run ID: {{.run_id}}</div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()">
+        <span class="theme-icon">◐</span> Toggle Theme
+      </button>
+    </header>
+
+    <div class="stats-grid" id="stats"></div>
+
+    <div class="filters">
+      <div class="filter-group">
+        <label for="status-filter">Status</label>
+        <select id="status-filter">
+          <option value="all">All Statuses</option>
+          <option value="success">Success</option>
+          <option value="error">Error</option>
+          <option value="skipped">Skipped</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="type-filter">Type</label>
+        <select id="type-filter">
+          <option value="all">All Types</option>
+          <option value="http">HTTP</option>
+          <option value="sql">SQL</option>
+          <option value="mongo">MongoDB</option>
+          <option value="grpc">gRPC</option>
+          <option value="step">Other</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="search-filter">Search</label>
+        <input type="text" id="search-filter" placeholder="Filter by step name..." />
+      </div>
+    </div>
+
+    <div class="log-entries" id="log-list"></div>
+
+    <footer>
+      Generated by go-flow • Open source e2e yaml-based desk test automation tool
+    </footer>
+  </div>
+
+  <script id="log-data" type="application/json">{{.json_data}}</script>
+  <script>
+    const data = JSON.parse(document.getElementById('log-data').textContent || '[]');
+    const listEl = document.getElementById('log-list');
+    const statusFilter = document.getElementById('status-filter');
+    const typeFilter = document.getElementById('type-filter');
+    const searchFilter = document.getElementById('search-filter');
+    const statsEl = document.getElementById('stats');
+
+    // Theme management
+    function toggleTheme() {
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme');
+      const next = current === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+    }
+
+    function initTheme() {
+      const saved = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const theme = saved || (prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+
+    initTheme();
+
+    const formatNumber = (value) => new Intl.NumberFormat().format(value);
+    const formatDuration = (ms) => {
+      if (ms < 1000) return ms + 'ms';
+      if (ms < 60000) return (ms / 1000).toFixed(2) + 's';
+      return (ms / 60000).toFixed(2) + 'm';
+    };
+
+    function renderStats(entries) {
+      const totals = {
+        total: entries.length,
+        success: entries.filter(e => e.status === 'success').length,
+        error: entries.filter(e => e.status === 'error').length,
+        skipped: entries.filter(e => e.status === 'skipped').length,
+        avgDuration: entries.length
+          ? Math.round(entries.reduce((sum, e) => sum + (e.duration_ms || 0), 0) / entries.length)
+          : 0,
+      };
+
+      statsEl.innerHTML = [
+        { label: 'Total Steps', value: totals.total },
+        { label: 'Success', value: totals.success },
+        { label: 'Failures', value: totals.error },
+        { label: 'Skipped', value: totals.skipped },
+        { label: 'Avg Duration', value: formatDuration(totals.avgDuration) },
+      ].map(stat => 
+        '<div class="stat-card">' +
+        '<div class="stat-value">' + (typeof stat.value === 'number' && stat.label !== 'Avg Duration' ? formatNumber(stat.value) : stat.value) + '</div>' +
+        '<div class="stat-label">' + stat.label + '</div>' +
+        '</div>'
+      ).join('');
+    }
+
+    function escapeHTML(str = '') {
+      if (typeof str !== 'string') str = JSON.stringify(str, null, 2) || '';
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function renderJSON(obj) {
+      if (!obj) return '<em style="color: var(--text-tertiary)">No data</em>';
+      return '<pre>' + escapeHTML(JSON.stringify(obj, null, 2)) + '</pre>';
+    }
+
+    function render(entries) {
+      if (!entries.length) {
+        listEl.innerHTML = 
+          '<div class="empty-state">' +
+          '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+          '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>' +
+          '</svg>' +
+          '<p>No log entries match your filters</p>' +
+          '</div>';
+        return;
+      }
+
+      listEl.innerHTML = entries.map((entry, idx) => {
+        const status = (entry.status || 'unknown').toLowerCase();
+        const stepType = (entry.type || 'step').toLowerCase();
+        const duration = formatDuration(entry.duration_ms || 0);
+        const timestamp = new Date(entry.started_at).toLocaleString();
+
+        return (
+          '<div class="log-card">' +
+          '<div class="log-header">' +
+          '<div class="log-title">' +
+          '<div class="log-step">#' + (idx + 1) + ' · ' + escapeHTML(entry.step || '(unnamed step)') + '</div>' +
+          '<div class="log-meta">' + timestamp + ' · ' + duration + '</div>' +
+          '</div>' +
+          '<div class="badge-group">' +
+          '<span class="badge type">' + stepType + '</span>' +
+          '<span class="badge ' + status + '">' + status + '</span>' +
+          '</div>' +
+          '</div>' +
+          '<div class="log-body">' +
+          '<details><summary>Request</summary>' + renderJSON(entry.request) + '</details>' +
+          '<details><summary>Response</summary>' + renderJSON(entry.response) + '</details>' +
+          (entry.error ? '<div class="error-block"><strong>Error:</strong> ' + escapeHTML(entry.error) + '</div>' : '') +
+          '</div>' +
+          '</div>'
+        );
+      }).join('');
+    }
+
+    function applyFilters() {
+      const statusValue = statusFilter.value;
+      const typeValue = typeFilter.value;
+      const searchValue = searchFilter.value.toLowerCase();
+
+      const filtered = data.filter(entry => {
+        const statusMatch = statusValue === 'all' || (entry.status || '').toLowerCase() === statusValue;
+        const typeMatch = typeValue === 'all' || (entry.type || '').toLowerCase() === typeValue;
+        const searchMatch = !searchValue || (entry.step || '').toLowerCase().includes(searchValue);
+        return statusMatch && typeMatch && searchMatch;
+      });
+
+      render(filtered);
+    }
+
+    renderStats(data);
+    render(data);
+
+    statusFilter.addEventListener('change', applyFilters);
+    typeFilter.addEventListener('change', applyFilters);
+    searchFilter.addEventListener('input', applyFilters);
+  </script>
+</body>
+</html>

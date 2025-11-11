@@ -133,6 +133,7 @@ type FlowFile struct {
 type FlowRunner struct {
 	client   *http.Client
 	exporter *varExporter
+	logger   *runLogger
 }
 
 type exportRecord struct {
@@ -168,15 +169,37 @@ func ensureDirExists(dir string) error {
 	return os.MkdirAll(cleaned, dirPermission)
 }
 
-func newFlowRunner(exportPath string) (*FlowRunner, error) {
+func newHTTPClient(logger *runLogger) *http.Client {
+	var transport http.RoundTripper = http.DefaultTransport
+	if base, ok := http.DefaultTransport.(*http.Transport); ok {
+		transport = base.Clone()
+	}
+
+	if logger != nil {
+		transport = loggingTransport{base: transport}
+	}
+
+	return &http.Client{
+		Timeout:   httpClientTimeout,
+		Transport: transport,
+	}
+}
+
+func newFlowRunner(exportPath, logDir string) (*FlowRunner, error) {
 	exporter, err := newVarExporter(exportPath)
 	if err != nil {
 		return nil, err
 	}
 
+	logger, err := newRunLogger(logDir)
+	if err != nil {
+		return nil, err
+	}
+
 	return &FlowRunner{
-		client:   &http.Client{Timeout: httpClientTimeout},
+		client:   newHTTPClient(logger),
 		exporter: exporter,
+		logger:   logger,
 	}, nil
 }
 
@@ -185,11 +208,19 @@ func (r *FlowRunner) Close() error {
 		return nil
 	}
 
-	if r.exporter == nil {
-		return nil
+	var err error
+
+	if r.exporter != nil {
+		err = r.exporter.Close()
 	}
 
-	return r.exporter.Close()
+	if r.logger != nil {
+		if logErr := r.logger.Close(); err == nil {
+			err = logErr
+		}
+	}
+
+	return err
 }
 
 func newVarExporter(path string) (*varExporter, error) {
@@ -250,6 +281,8 @@ func (e *varExporter) Close() error {
 
 	return nil
 }
+
+// logging helpers moved to logger.go
 
 func writeExportRecords(w io.Writer, records []exportRecord) error {
 	if w == nil {
@@ -429,6 +462,11 @@ steps:
 						Value:   defaultExportedVarsPath,
 						Usage:   "Directory (or explicit file path) to export collected variables as JSON",
 					},
+					&cli.StringFlag{
+						Name:    "log",
+						Aliases: []string{"l"},
+						Usage:   "Directory to store per-step logs (HTML + JSON). Disabled when empty.",
+					},
 				},
 				Action: runFlowsAction,
 			},
@@ -483,7 +521,9 @@ func runFlowsAction(c *cli.Context) (err error) {
 		return err
 	}
 
-	runner, err := newFlowRunner(exportFile)
+	logDir := c.String("log")
+
+	runner, err := newFlowRunner(exportFile, logDir)
 	if err != nil {
 		return err
 	}
@@ -646,9 +686,48 @@ func parseVarOverrides(pairs []string) (map[string]string, error) {
 	return overrides, nil
 }
 
-func (r *FlowRunner) executeStep(ctx context.Context, step Step, vars map[string]string) error {
+func (r *FlowRunner) executeStep(ctx context.Context, step Step, vars map[string]string) (err error) {
+	logCtx := r.newStepLogContext()
+	stepType := classifyStep(step)
+	logStatus := "success"
+	startedAt := time.Now()
+
+	defer func() {
+		if r.logger == nil {
+			return
+		}
+
+		status := logStatus
+		if status != "skipped" && err != nil {
+			status = "error"
+		}
+
+		var req, resp map[string]any
+		if logCtx != nil {
+			req = logCtx.Request
+			resp = logCtx.Response
+		}
+
+		var errMsg string
+		if err != nil {
+			errMsg = err.Error()
+		}
+
+		r.logger.Record(stepLogEntry{
+			Step:           step.Name,
+			Type:           stepType,
+			Status:         status,
+			StartedAt:      startedAt.UTC(),
+			DurationMillis: time.Since(startedAt).Milliseconds(),
+			Request:        req,
+			Response:       resp,
+			Error:          errMsg,
+		})
+	}()
+
 	if step.Skip {
 		fmt.Printf("%s→ Skipping step %q%s\n", colorGray, step.Name, colorReset)
+		logStatus = "skipped"
 		return nil
 	}
 
@@ -660,11 +739,9 @@ func (r *FlowRunner) executeStep(ctx context.Context, step Step, vars map[string
 
 		fmt.Printf("%s→ Waiting %s before step %q%s\n", colorGray, timeToWait.String(), step.Name, colorReset)
 
-		// printing remaining time every second
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 
-		// listen for interruption signals
 		signalChan := make(chan os.Signal, 1)
 		signal.Notify(signalChan, os.Interrupt)
 
@@ -697,22 +774,26 @@ func (r *FlowRunner) executeStep(ctx context.Context, step Step, vars map[string
 	sqlStmt := strings.TrimSpace(render(step.SQL, vars))
 	if sqlStmt != "" {
 		step.applyDefaults()
-		return executeSQLStep(ctx, step, sqlStmt, vars)
+		stepType = "sql"
+		return executeSQLStep(ctx, step, sqlStmt, vars, logCtx)
 	}
 
 	if step.Mongo != nil {
 		step.applyDefaults()
-		return r.executeMongoStep(ctx, step, vars)
+		stepType = "mongo"
+		return r.executeMongoStep(ctx, step, vars, logCtx)
 	}
 
 	if step.GRPC != nil {
 		step.applyDefaults()
-		return r.executeGRPCStep(ctx, step, vars)
+		stepType = "grpc"
+		return r.executeGRPCStep(ctx, step, vars, logCtx)
 	}
 
 	if step.Method == "" || step.URL == "" {
 		return fmt.Errorf("step %q requires sql, grpc, or method/url fields", step.Name)
 	}
+	stepType = "http"
 
 	url := render(step.URL, vars)
 	bodyStr := render(step.Body, vars)
@@ -720,6 +801,13 @@ func (r *FlowRunner) executeStep(ctx context.Context, step Step, vars map[string
 	var body io.Reader
 	if bodyStr != "" {
 		body = bytes.NewBufferString(bodyStr)
+	}
+
+	if logCtx != nil {
+		reqMap := logCtx.ensureRequestMap()
+		reqMap["method"] = step.Method
+		reqMap["url"] = url
+		reqMap["body"] = normalizeJSONValue(bodyStr)
 	}
 
 	step.applyDefaults()
@@ -732,8 +820,24 @@ func (r *FlowRunner) executeStep(ctx context.Context, step Step, vars map[string
 		return fmt.Errorf("build request for step %q: %w", step.Name, err)
 	}
 
+	var headerSnapshot map[string]string
+	if logCtx != nil && len(step.Headers) > 0 {
+		headerSnapshot = make(map[string]string, len(step.Headers))
+	}
+
 	for k, v := range step.Headers {
-		req.Header.Set(k, render(v, vars))
+		rendered := render(v, vars)
+		req.Header.Set(k, rendered)
+		if headerSnapshot != nil {
+			headerSnapshot[k] = rendered
+		}
+	}
+
+	if logCtx != nil {
+		req = req.WithContext(context.WithValue(req.Context(), logContextKey{}, logCtx))
+		if headerSnapshot != nil {
+			logCtx.ensureRequestMap()["headers"] = headerSnapshot
+		}
 	}
 
 	fmt.Printf("%s⇒ %s%s %s %s%s\n",
@@ -754,6 +858,13 @@ func (r *FlowRunner) executeStep(ctx context.Context, step Step, vars map[string
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("read response body for step %q: %w", step.Name, err)
+	}
+
+	if logCtx != nil {
+		respMap := logCtx.ensureResponseMap()
+		respMap["body"] = normalizeJSONBytes(respBytes)
+		respMap["status"] = resp.StatusCode
+		respMap["headers"] = flattenHTTPHeader(resp.Header)
 	}
 
 	if step.ExpectStatus != 0 && resp.StatusCode != step.ExpectStatus {
@@ -781,7 +892,7 @@ func (r *FlowRunner) executeStep(ctx context.Context, step Step, vars map[string
 	return nil
 }
 
-func (r *FlowRunner) executeMongoStep(ctx context.Context, step Step, vars map[string]string) error {
+func (r *FlowRunner) executeMongoStep(ctx context.Context, step Step, vars map[string]string, logCtx *stepLogContext) error {
 	cfg := step.Mongo
 	if cfg == nil {
 		return fmt.Errorf("step %q missing mongo configuration", step.Name)
@@ -838,6 +949,15 @@ func (r *FlowRunner) executeMongoStep(ctx context.Context, step Step, vars map[s
 	}
 
 	db := client.Database(dbName)
+
+	if logCtx != nil {
+		reqMap := logCtx.ensureRequestMap()
+		reqMap["operation"] = op
+		reqMap["database"] = dbName
+		if useCollection {
+			reqMap["collection"] = collName
+		}
+	}
 	var collection *mongo.Collection
 	if useCollection {
 		collection = db.Collection(collName)
@@ -862,9 +982,14 @@ func (r *FlowRunner) executeMongoStep(ctx context.Context, step Step, vars map[s
 
 	switch op {
 	case mongoOpFindOne:
-		filterDoc, err := parseBSONDocument(render(cfg.Filter, vars))
+		filterStr := render(cfg.Filter, vars)
+		filterDoc, err := parseBSONDocument(filterStr)
 		if err != nil {
 			return fmt.Errorf("step %q: parse mongo filter: %w", step.Name, err)
+		}
+
+		if logCtx != nil {
+			logCtx.ensureRequestMap()["filter"] = filterStr
 		}
 
 		var doc bson.M
@@ -881,14 +1006,22 @@ func (r *FlowRunner) executeMongoStep(ctx context.Context, step Step, vars map[s
 			}
 		}
 	case mongoOpFind:
-		filterDoc, err := parseBSONDocument(render(cfg.Filter, vars))
+		filterStr := render(cfg.Filter, vars)
+		filterDoc, err := parseBSONDocument(filterStr)
 		if err != nil {
 			return fmt.Errorf("step %q: parse mongo filter: %w", step.Name, err)
+		}
+
+		if logCtx != nil {
+			logCtx.ensureRequestMap()["filter"] = filterStr
 		}
 
 		findOpts := options.Find()
 		if cfg.Limit > 0 {
 			findOpts.SetLimit(cfg.Limit)
+			if logCtx != nil {
+				logCtx.ensureRequestMap()["limit"] = cfg.Limit
+			}
 		}
 
 		cursor, err := collection.Find(stepCtx, filterDoc, findOpts)
@@ -908,9 +1041,14 @@ func (r *FlowRunner) executeMongoStep(ctx context.Context, step Step, vars map[s
 			return fmt.Errorf("step %q: encode mongo find results: %w", step.Name, err)
 		}
 	case mongoOpAggregate:
-		pipeline, err := parseBSONArray(render(cfg.Pipeline, vars))
+		pipelineStr := render(cfg.Pipeline, vars)
+		pipeline, err := parseBSONArray(pipelineStr)
 		if err != nil {
 			return fmt.Errorf("step %q: parse mongo pipeline: %w", step.Name, err)
+		}
+
+		if logCtx != nil {
+			logCtx.ensureRequestMap()["pipeline"] = pipelineStr
 		}
 
 		cursor, err := collection.Aggregate(stepCtx, pipeline)
@@ -930,12 +1068,17 @@ func (r *FlowRunner) executeMongoStep(ctx context.Context, step Step, vars map[s
 			return fmt.Errorf("step %q: encode mongo aggregate results: %w", step.Name, err)
 		}
 	case mongoOpInsertOne:
-		document, err := parseBSONDocument(render(cfg.Document, vars))
+		documentStr := render(cfg.Document, vars)
+		document, err := parseBSONDocument(documentStr)
 		if err != nil {
 			return fmt.Errorf("step %q: parse mongo document: %w", step.Name, err)
 		}
 		if len(document) == 0 {
 			return fmt.Errorf("step %q: mongo document is required for insertOne", step.Name)
+		}
+
+		if logCtx != nil {
+			logCtx.ensureRequestMap()["document"] = documentStr
 		}
 
 		res, err := collection.InsertOne(stepCtx, document)
@@ -949,16 +1092,24 @@ func (r *FlowRunner) executeMongoStep(ctx context.Context, step Step, vars map[s
 			return fmt.Errorf("step %q: encode mongo insertOne result: %w", step.Name, err)
 		}
 	case mongoOpUpdateOne:
-		filterDoc, err := parseBSONDocument(render(cfg.Filter, vars))
+		filterStr := render(cfg.Filter, vars)
+		filterDoc, err := parseBSONDocument(filterStr)
 		if err != nil {
 			return fmt.Errorf("step %q: parse mongo filter: %w", step.Name, err)
 		}
-		updateDoc, err := parseBSONDocument(render(cfg.Update, vars))
+		updateStr := render(cfg.Update, vars)
+		updateDoc, err := parseBSONDocument(updateStr)
 		if err != nil {
 			return fmt.Errorf("step %q: parse mongo update: %w", step.Name, err)
 		}
 		if len(updateDoc) == 0 {
 			return fmt.Errorf("step %q: mongo update document is required for updateOne", step.Name)
+		}
+
+		if logCtx != nil {
+			reqMap := logCtx.ensureRequestMap()
+			reqMap["filter"] = filterStr
+			reqMap["update"] = updateStr
 		}
 
 		res, err := collection.UpdateOne(stepCtx, filterDoc, updateDoc)
@@ -985,9 +1136,14 @@ func (r *FlowRunner) executeMongoStep(ctx context.Context, step Step, vars map[s
 			return fmt.Errorf("step %q: encode mongo updateOne result: %w", step.Name, err)
 		}
 	case mongoOpDeleteOne:
-		filterDoc, err := parseBSONDocument(render(cfg.Filter, vars))
+		filterStr := render(cfg.Filter, vars)
+		filterDoc, err := parseBSONDocument(filterStr)
 		if err != nil {
 			return fmt.Errorf("step %q: parse mongo filter: %w", step.Name, err)
+		}
+
+		if logCtx != nil {
+			logCtx.ensureRequestMap()["filter"] = filterStr
 		}
 
 		res, err := collection.DeleteOne(stepCtx, filterDoc)
@@ -1005,6 +1161,10 @@ func (r *FlowRunner) executeMongoStep(ctx context.Context, step Step, vars map[s
 		cmdStr := strings.TrimSpace(render(cfg.Command, vars))
 		if cmdStr == "" {
 			return fmt.Errorf("step %q: mongo command payload is required", step.Name)
+		}
+
+		if logCtx != nil {
+			logCtx.ensureRequestMap()["command"] = cmdStr
 		}
 
 		commandDoc, err := parseBSONDocument(cmdStr)
@@ -1032,6 +1192,12 @@ func (r *FlowRunner) executeMongoStep(ctx context.Context, step Step, vars map[s
 
 	if len(step.Save) > 0 && len(resultPayload) > 0 && json.Valid(resultPayload) {
 		saveValues(resultPayload, step.Save, vars)
+	}
+
+	if logCtx != nil {
+		respMap := logCtx.ensureResponseMap()
+		respMap["affected"] = affected
+		respMap["body"] = normalizeJSONBytes(resultPayload)
 	}
 
 	r.recordExport(step, vars)
@@ -1104,7 +1270,7 @@ func bsonToJSON(value any) ([]byte, error) {
 	return bson.MarshalExtJSON(value, true, true)
 }
 
-func (r *FlowRunner) executeGRPCStep(ctx context.Context, step Step, vars map[string]string) error {
+func (r *FlowRunner) executeGRPCStep(ctx context.Context, step Step, vars map[string]string, logCtx *stepLogContext) error {
 	cfg := step.GRPC
 	if cfg == nil {
 		return fmt.Errorf("step %q missing grpc configuration", step.Name)
@@ -1128,6 +1294,17 @@ func (r *FlowRunner) executeGRPCStep(ctx context.Context, step Step, vars map[st
 	payload := render(cfg.Request, vars)
 	headers := buildGRPCHeaders(cfg.Metadata, vars)
 	reflectionHeaders := buildGRPCHeaders(cfg.ReflectionMetadata, vars)
+
+	if logCtx != nil {
+		reqMap := logCtx.ensureRequestMap()
+		reqMap["target"] = target
+		reqMap["method"] = method
+		reqMap["payload"] = normalizeJSONValue(payload)
+		reqMap["metadata"] = headers
+		if len(reflectionHeaders) > 0 {
+			reqMap["reflection_metadata"] = reflectionHeaders
+		}
+	}
 
 	fmt.Printf("%s⇒ %s%s gRPC %s %s%s\n",
 		colorBlue,
@@ -1196,6 +1373,13 @@ func (r *FlowRunner) executeGRPCStep(ctx context.Context, step Step, vars map[st
 	}
 
 	respBytes := handler.ResponsePayload()
+	if logCtx != nil {
+		respMap := logCtx.ensureResponseMap()
+		respMap["body"] = normalizeJSONBytes(respBytes)
+		respMap["status_code"] = respStatus.Code().String()
+		respMap["status_msg"] = respStatus.Message()
+	}
+
 	if err := validateAndSaveJSON(step, respBytes, vars, "response"); err != nil {
 		return err
 	}
@@ -1670,7 +1854,7 @@ func ensureExpectedAffectedRows(step Step, affectedRows int) error {
 	return fmt.Errorf("step %q failed: unexpected affected rows %d", step.Name, affectedRows)
 }
 
-func executeSQLStep(ctx context.Context, step Step, sqlStmt string, vars map[string]string) error {
+func executeSQLStep(ctx context.Context, step Step, sqlStmt string, vars map[string]string, logCtx *stepLogContext) error {
 	dbURL := strings.TrimSpace(render(step.DatabaseURL, vars))
 	if dbURL == "" {
 		dbURL = strings.TrimSpace(vars["database_url"])
@@ -1682,6 +1866,10 @@ func executeSQLStep(ctx context.Context, step Step, sqlStmt string, vars map[str
 
 	if dbURL == "" {
 		return fmt.Errorf("step %q requires database_url (var, step override, or DATABASE_URL env)", step.Name)
+	}
+
+	if logCtx != nil {
+		logCtx.ensureRequestMap()["sql"] = sqlStmt
 	}
 
 	stepCtx, cancel := context.WithTimeout(ctx, time.Duration(step.TimeoutSeconds)*time.Second)
@@ -1708,6 +1896,10 @@ func executeSQLStep(ctx context.Context, step Step, sqlStmt string, vars map[str
 	affectedRows, err := executeSQLAndMaybeSave(stepCtx, db, step, sqlStmt, vars)
 	if err != nil {
 		return err
+	}
+
+	if logCtx != nil {
+		logCtx.ensureResponseMap()["affected_rows"] = affectedRows
 	}
 
 	if err := ensureExpectedAffectedRows(step, affectedRows); err != nil {

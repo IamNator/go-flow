@@ -32,6 +32,7 @@ Looking to wire this CLI into an autonomous agent? Read the LLM quick-reference 
 - Colored CLI output, per-step timeouts, optional skips
 - Examples directory plus `go-flow new` scaffolding
 - Organized flows by directory prefix
+- Optional HTML/JSON logging via `--log` to capture every step's request/response payload
 
 ## Installation
 
@@ -122,6 +123,9 @@ go-flow run --export_path go-flow/exports/
 # Force-export all steps that call `save` (even if `export: true` is not set per step)
 go-flow run --export --export_path go-flow/exports/
 
+# Capture HTML/JSON logs for viewing in a browser
+go-flow run --log ./flow-logs
+
 # Export to explicit file with stdout fallback if the file cannot be written
 go-flow run --export_path /tmp/last-flow-vars.json
 ```
@@ -133,6 +137,11 @@ go-flow run --export_path /tmp/last-flow-vars.json
 - `-v, --var` - Override flow variable (format: `key=value`)
 - `-e, --export` - Toggle default export behavior for every step; once enabled, any step that calls `save` (and does not explicitly set `export: false`) will write captured variables to `--export_path`.
 - `-ep, --export_path` - Directory (or explicit file path) for exported `save` variables. Directories are created only if at least one step exports data; otherwise nothing is touched. If go-flow cannot write to the chosen path, it prints the JSON to stdout so you still get the captured values (default path: `go-flow/exports/` generating timestamped filenames like `2025-11-07T18:42:41Z.json`).
+- `-l, --log` - Directory to store per-step logs. When provided, go-flow writes `<timestamp>.json` and `<timestamp>.html` so you can inspect every request/response (payloads, metadata, durations) in a browser. No logging occurs when the flag is omitted.
+
+### HTML Logs
+
+When `--log /path/to/logs` is set, each run produces matching JSON + HTML files. The HTML view uses the open-source [Pico.css](https://picocss.com) theme, so you get a polished, filterable dashboard showing every step’s metadata, payloads, and errors without re-running the flow.
 
 #### `go-flow new`
 

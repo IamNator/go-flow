@@ -20,7 +20,7 @@ go build -o go-flow ./...
 | Command | Purpose | Key Flags / Notes |
 |---------|---------|------------------|
 | `go-flow new <flow-name>` | Scaffold `flow/<NNN>_<flow-name>.yaml` (increments by 2). | Put flags **before** `<flow-name>`: `go-flow new --dir tests/e2e signup`. |
-| `go-flow run` | Execute one or more flows. | `--file PATH`, `--dir DIR`, `--flow NAME`, `--var key=value`, `--export` (turn on exports for all steps unless they set `export: false`), `--export_path DIR/FILE` (defaults to `go-flow/exports/`; directories are created only if at least one step exports data, otherwise nothing is written). |
+| `go-flow run` | Execute one or more flows. | `--file PATH`, `--dir DIR`, `--flow NAME`, `--var key=value`, `--export` (turn on exports for all steps unless they set `export: false`), `--export_path DIR/FILE` (defaults to `go-flow/exports/`; directories are created only if at least one step exports data, otherwise nothing is written), `--log DIR` (writes HTML + JSON logs for browser inspection). |
 | `go-flow list` | List discoverable flows. | `--dir DIR` (defaults to `flow`). |
 
 ## Workflow (LLM Checklist)
@@ -28,7 +28,7 @@ go build -o go-flow ./...
 2. **Scaffold (if needed)**: `go-flow new --dir DIR flow-name` and then edit the generated YAML.
 3. **Edit flow**: modify `vars` and `steps`; remember each step is HTTP *or* SQL *or* Mongo *or* gRPC.
 4. **Run**: `go-flow run` (all flows), `go-flow run --flow NAME`, or `--file PATH` for a single YAML.
-5. **Override / export**: add `--var key=value` for dynamic substitutions, `--export` to treat every `save` as export-worthy (useful when flows forget `export: true`), and `--export_path path/to/dir-or-file` (defaults to `go-flow/exports/`; go-flow only creates the directory/file if there are exported values, otherwise nothing touches disk). If the path is unwritable, go-flow prints the JSON to stdout. Only steps with `save` fields and export enabled (`export: true`, CLI `--export`, or both) contribute to the file.
+5. **Override / export / log**: add `--var key=value` for dynamic substitutions, `--export` to treat every `save` as export-worthy (useful when flows forget `export: true`), `--export_path path/to/dir-or-file` (defaults to `go-flow/exports/`; go-flow only creates the directory/file if there are exported values, otherwise nothing touches disk), and `--log path/to/log-dir` if you want HTML/JSON artifacts capturing every request/response. If export paths are unwritable, go-flow prints the JSON to stdout. Only steps with `save` fields and export enabled (`export: true`, CLI `--export`, or both) contribute to the export file; logging is independent and records all steps.
 6. **Interpret output**: ✅ / ❌ lines indicate pass/fail; failures print response payloads for quick debugging.
 
 ## Flow Structure
@@ -74,5 +74,6 @@ Helpers live in `template_funcs.go`; consult it before relying on additional beh
 - Always mention the binary as `go-flow` (never `flow`).
 - Flags must appear before positional args due to Go’s `flag` parsing.
 - Saved values go into an in-memory map and can be exported via `--export_path` (defaults to timestamped files like `2025-11-07T18:42:41Z.json` inside `go-flow/exports/`; go-flow only creates directories/files when data exists and falls back to stdout if the path is unwritable). Use `--export` to force every `save` to be exported even if the YAML omitted `export: true`.
+- Use `--log DIR` to capture HTML + JSON artifacts for every step; open the HTML file locally to inspect request/response payloads without re-running the flow.
 - Runner stops on first failing step; rerun after fixing the underlying issue.
 - Keep YAML as ASCII; template renders use Go’s `text/template` with `missingkey=zero`.
