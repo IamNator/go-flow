@@ -45,7 +45,7 @@ import (
 
 const (
 	defaultFlowDir            = "go-flow"
-	defaultExportedVarsPath   = "go-flow/exports/"
+	defaultExportedVarsPath   = "/exports"
 	dirPermission             = 0o755
 	filePermission            = 0o644
 	flowPrefixMinLength       = 4
@@ -346,6 +346,7 @@ func main() {
 		Name:           "go-flow",
 		Usage:          "Run flows defined in YAML files",
 		DefaultCommand: "run",
+		OnUsageError:   usageErrorHandler,
 		Commands: []*cli.Command{
 			{
 				Name:  "new",
@@ -500,6 +501,19 @@ steps:
 	}
 }
 
+func usageErrorHandler(c *cli.Context, err error, isSubcommand bool) error {
+	if err == nil {
+		return nil
+	}
+
+	if strings.Contains(err.Error(), "flag provided but not defined") {
+		fmt.Printf("%sFlags belong after the command name (Go's CLI parser requirement).%s\n", colorCyan, colorReset)
+		fmt.Printf("For example: %sgo-flow new --dir services/backend/go-flow stripe-webhook%s\n\n", colorBlue, colorReset)
+	}
+
+	return err
+}
+
 func runFlowsAction(c *cli.Context) (err error) {
 	targets, err := resolveFlowTargets(c.String("file"), c.String("dir"), c.String("flow"))
 	if err != nil {
@@ -516,6 +530,10 @@ func runFlowsAction(c *cli.Context) (err error) {
 	}
 
 	exportPath := c.String("export_path")
+	if exportPath == defaultExportedVarsPath {
+		// get target dir if default path is used
+		exportPath = filepath.Join(filepath.Dir(targets[0].Path), defaultExportedVarsPath)
+	}
 	exportFile, err := resolveExportFilePath(exportPath)
 	if err != nil {
 		return err
